@@ -8,6 +8,7 @@ build/
 .eggs/
 *.egg
 .venv/
+.venv-chat/
 venv/
 
 # Environment

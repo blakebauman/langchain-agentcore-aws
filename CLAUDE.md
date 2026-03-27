@@ -19,6 +19,7 @@ make infra-plan       # Terraform plan
 make infra-apply      # Terraform apply
 make run-agent QUERY="your question"  # Run LangGraph agent locally
 make run-runtime      # Start AgentCore Runtime server (AG-UI protocol)
+make install-chat     # Create chat venv (Python <=3.13, Chainlit not 3.14 compatible)
 make run-chat         # Start Chainlit chat UI (http://localhost:8000)
 ```
 
