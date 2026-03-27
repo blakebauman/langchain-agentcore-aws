@@ -52,9 +52,11 @@ def get_chat_checkpointer() -> BaseCheckpointSaver:
             return cp
 
     if settings.chat_persistence == "sqlite":
+        import aiosqlite
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-        return AsyncSqliteSaver.from_conn_string(settings.chat_sqlite_path)
+        conn = aiosqlite.connect(settings.chat_sqlite_path)
+        return AsyncSqliteSaver(conn)
 
     from langgraph.checkpoint.memory import InMemorySaver
 
