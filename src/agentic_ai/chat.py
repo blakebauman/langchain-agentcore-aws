@@ -4,6 +4,13 @@ Provides a web-based chat interface with streaming responses, conversation
 memory, and multi-session support. Uses the same agent factories and memory
 system as the CLI and runtime entry points.
 
+Features:
+- Streaming token-by-token responses
+- Chat profiles for switching between ReAct and Planning agents
+- Tool call visualization via expandable steps
+- Optional password authentication
+- File upload support for knowledge base queries
+
 Run via: chainlit run src/agentic_ai/chat.py --port 8000
 Or:      make run-chat
 """
@@ -20,11 +27,14 @@ from agentic_ai.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _create_chat_agent():
+def _create_chat_agent(agent_type: str = "react"):
     """Create an agent configured for the chat UI.
 
     Uses InMemorySaver as a fallback checkpointer when AgentCore memory is
     disabled, so conversation history is preserved within a running session.
+
+    Args:
+        agent_type: Which agent factory to use ("react" or "planning").
     """
     from langgraph.checkpoint.memory import InMemorySaver
 
@@ -37,7 +47,7 @@ def _create_chat_agent():
     if checkpointer is None:
         checkpointer = InMemorySaver()
 
-    if settings.chat_agent_type == "planning":
+    if agent_type == "planning":
         from agentic_ai.agents.deep_agent import create_planning_agent
 
         return create_planning_agent(checkpointer=checkpointer, store=store)
@@ -47,19 +57,66 @@ def _create_chat_agent():
     return create_agent(checkpointer=checkpointer, store=store)
 
 
+# --- Authentication (opt-in via CHAT_AUTH_SECRET + CHAT_AUTH_PASSWORD) ---
+
+
+if settings.chat_auth_secret and settings.chat_auth_password:
+
+    @cl.password_auth_callback
+    async def auth_callback(username: str, password: str) -> cl.User | None:
+        """Validate username/password when authentication is enabled."""
+        if username == settings.chat_auth_username and password == settings.chat_auth_password:
+            return cl.User(identifier=username, metadata={"role": "admin"})
+        return None
+
+
+# --- Chat profiles ---
+
+
+@cl.set_chat_profiles
+async def chat_profiles() -> list[cl.ChatProfile]:
+    """Define selectable chat profiles for agent type switching."""
+    return [
+        cl.ChatProfile(
+            name="ReAct Agent",
+            markdown_description="Simple tool-calling agent for straightforward Q&A.",
+            icon="https://cdn-icons-png.flaticon.com/512/4712/4712109.png",
+            default=True,
+        ),
+        cl.ChatProfile(
+            name="Planning Agent",
+            markdown_description=("Multi-step planning agent for complex research tasks."),
+            icon="https://cdn-icons-png.flaticon.com/512/2620/2620389.png",
+        ),
+    ]
+
+
+def _profile_to_agent_type(profile_name: str | None) -> str:
+    """Map a chat profile name to an agent type string."""
+    if profile_name == "Planning Agent":
+        return "planning"
+    return "react"
+
+
+# --- Session lifecycle ---
+
+
 @cl.on_chat_start
 async def on_chat_start() -> None:
     """Initialize a new chat session with a fresh agent and thread ID."""
-    agent = _create_chat_agent()
+    profile = cl.user_session.get("chat_profile")
+    agent_type = _profile_to_agent_type(profile)
+    agent = _create_chat_agent(agent_type)
     thread_id = str(uuid.uuid4())
 
     cl.user_session.set("agent", agent)
     cl.user_session.set("thread_id", thread_id)
+    cl.user_session.set("agent_type", agent_type)
 
     logger.info(
         "Chat session started: thread_id=%s, agent_type=%s",
         thread_id,
-        settings.chat_agent_type,
+        agent_type,
     )
 
 
@@ -70,18 +127,59 @@ async def on_message(msg: cl.Message) -> None:
     thread_id = cl.user_session.get("thread_id")
     config = {"configurable": {"thread_id": thread_id}}
 
+    # Build message content, including uploaded file text if present
+    content = msg.content
+    if msg.elements:
+        file_texts = []
+        for element in msg.elements:
+            if hasattr(element, "path") and element.path:
+                try:
+                    with open(element.path) as f:
+                        file_texts.append(f"[Uploaded file: {element.name}]\n{f.read()}")
+                except (OSError, UnicodeDecodeError):
+                    file_texts.append(
+                        f"[Uploaded file: {element.name} — binary file, cannot read as text]"
+                    )
+        if file_texts:
+            content = content + "\n\n" + "\n\n".join(file_texts)
+
     response = cl.Message(content="")
+    active_steps: dict[str, cl.Step] = {}
 
     async for event in agent.astream_events(
-        {"messages": [("user", msg.content)]},
+        {"messages": [("user", content)]},
         config=config,
         version="v2",
     ):
-        if event["event"] == "on_chat_model_stream":
+        kind = event["event"]
+
+        # Tool call started — open a step
+        if kind == "on_tool_start":
+            tool_name = event.get("name", "tool")
+            run_id = event.get("run_id", "")
+            step = cl.Step(name=tool_name, type="tool")
+            step.input = str(event["data"].get("input", ""))
+            await step.__aenter__()
+            active_steps[run_id] = step
+
+        # Tool call finished — close the step with output
+        elif kind == "on_tool_end":
+            run_id = event.get("run_id", "")
+            step = active_steps.pop(run_id, None)
+            if step:
+                step.output = str(event["data"].get("output", ""))
+                await step.__aexit__(None, None, None)
+
+        # LLM streaming tokens
+        elif kind == "on_chat_model_stream":
             chunk = event["data"]["chunk"]
             token = chunk.content if isinstance(chunk.content, str) else ""
             if token:
                 await response.stream_token(token)
+
+    # Close any steps that didn't get an end event
+    for step in active_steps.values():
+        await step.__aexit__(None, None, None)
 
     await response.send()
 
@@ -89,10 +187,13 @@ async def on_message(msg: cl.Message) -> None:
 @cl.on_chat_resume
 async def on_chat_resume(thread: dict) -> None:
     """Resume a previous chat session by restoring the thread ID."""
-    agent = _create_chat_agent()
+    profile = cl.user_session.get("chat_profile")
+    agent_type = _profile_to_agent_type(profile)
+    agent = _create_chat_agent(agent_type)
     thread_id = thread.get("id", str(uuid.uuid4()))
 
     cl.user_session.set("agent", agent)
     cl.user_session.set("thread_id", thread_id)
+    cl.user_session.set("agent_type", agent_type)
 
     logger.info("Chat session resumed: thread_id=%s", thread_id)

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2026-03-26
+
+### Added
+
+- Chainlit chat UI with streaming responses and conversation memory
+- Chat profiles for switching between ReAct and Planning agents in the UI
+- Tool call visualization with expandable steps showing inputs and outputs
+- Optional password authentication for the chat UI
+- File upload support — uploaded text files are included in agent context
+- Docker support for the chat service (`docker/Dockerfile.chat`)
+- `make run-chat` command for local development
+
 ## [0.1.0] - 2026-03-26
 
 ### Added

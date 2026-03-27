@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # Chat UI settings
     chat_agent_type: str = "react"  # "react" or "planning"
     chat_port: int = 8000
+    chat_auth_secret: str = ""  # Set to enable password authentication
+    chat_auth_username: str = "admin"
+    chat_auth_password: str = ""  # Required when chat_auth_secret is set
 
     # AgentCore settings (all opt-in)
     agentcore_memory_enabled: bool = False
