@@ -1,0 +1,92 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make lint)",
+      "Bash(make fmt)",
+      "Bash(make test)",
+      "Bash(make test-integration)",
+      "Bash(make clean)",
+      "Bash(make install)",
+      "Bash(make run-agent *)",
+      "Bash(make run-runtime *)",
+      "Bash(make run-chat *)",
+      "Bash(make infra-init *)",
+      "Bash(make infra-plan *)",
+      "Bash(python -m pytest *)",
+      "Bash(.venv/bin/pytest *)",
+      "Bash(.venv/bin/ruff *)",
+      "Bash(.venv/bin/python -m pytest *)",
+      "Bash(source .venv/bin/activate *)",
+      "Bash(pip install *)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(terraform fmt *)",
+      "Bash(terraform validate *)",
+      "Bash(docker compose *)",
+      "Bash(docker-compose *)",
+      "Bash(docker build *)",
+      "Bash(docker ps *)",
+      "Bash(docker logs *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git switch *)",
+      "Bash(git stash *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git push *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Bash(gh *)",
+      "Bash(pip show *)",
+      "Bash(pip index *)",
+      "Bash(ls *)",
+      "WebSearch",
+      "WebFetch(domain:docs.aws.amazon.com)",
+      "WebFetch(domain:python.langchain.com)",
+      "WebFetch(domain:langchain-ai.github.io)",
+      "WebFetch(domain:registry.terraform.io)",
+      "WebFetch(domain:aws.amazon.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:github.com)"
+    ],
+    "deny": [
+      "Bash(terraform apply *)",
+      "Bash(terraform destroy *)",
+      "Bash(make infra-apply)",
+      "Bash(make infra-destroy)",
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)",
+      "Bash(git push --force-with-lease *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=\"$CLAUDE_TOOL_ARG_FILE_PATH\"; if [[ \"$file\" == *.py ]]; then .venv/bin/ruff check --fix \"$file\" 2>/dev/null; .venv/bin/ruff format \"$file\" 2>/dev/null; elif [[ \"$file\" == *.tf ]]; then terraform fmt \"$file\" 2>/dev/null; fi; exit 0",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); file=$(echo \"$input\" | jq -r '.tool_input.file_path // empty'); if [ -n \"$file\" ] && echo \"$file\" | grep -qE '\\.(env|env\\.local)$'; then echo 'Blocked: do not modify .env files directly — use .env.example instead' >&2; exit 2; fi; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
