@@ -38,12 +38,12 @@ def get_checkpointer() -> BaseCheckpointSaver | None:
     )
 
 
-def get_chat_checkpointer() -> BaseCheckpointSaver:
+async def get_chat_checkpointer() -> BaseCheckpointSaver:
     """Return a checkpointer for chat UI persistence.
 
     Follows the chat_persistence setting:
     - "agentcore": uses AgentCore (delegates to get_checkpointer, falls back to memory)
-    - "sqlite": persists to a local SQLite database
+    - "sqlite": persists to a local SQLite database (async)
     - "memory": in-memory only (default, lost on restart)
     """
     if settings.chat_persistence == "agentcore":
@@ -55,8 +55,10 @@ def get_chat_checkpointer() -> BaseCheckpointSaver:
         import aiosqlite
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-        conn = aiosqlite.connect(settings.chat_sqlite_path)
-        return AsyncSqliteSaver(conn)
+        conn = await aiosqlite.connect(settings.chat_sqlite_path)
+        saver = AsyncSqliteSaver(conn)
+        await saver.setup()
+        return saver
 
     from langgraph.checkpoint.memory import InMemorySaver
 

@@ -5,7 +5,7 @@ since chat.py uses chainlit decorators at module scope.
 """
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
@@ -32,42 +32,46 @@ def _mock_chainlit():
 
 class TestCreateChatAgent:
     @patch("agentic_ai.agents.langgraph_agent.ChatBedrockConverse")
-    def test_creates_react_agent_by_default(self, mock_model_cls: object) -> None:
-        from agentic_ai.chat import _create_chat_agent
+    async def test_creates_react_agent_by_default(self, mock_model_cls: object) -> None:
+        mock_cp = AsyncMock(return_value=InMemorySaver())
+        with patch("agentic_ai.memory.get_chat_checkpointer", mock_cp):
+            from agentic_ai.chat import _create_chat_agent
 
-        agent = _create_chat_agent()
-        assert agent is not None
+            agent = await _create_chat_agent()
+            assert agent is not None
 
     @patch("agentic_ai.agents.langgraph_agent.ChatBedrockConverse")
-    @patch("agentic_ai.memory.get_chat_checkpointer", return_value=InMemorySaver())
     @patch("agentic_ai.memory.get_memory_store", return_value=None)
     @patch("agentic_ai.agents.langgraph_agent.create_react_agent")
-    def test_passes_checkpointer_from_factory(
+    async def test_passes_checkpointer_from_factory(
         self,
         mock_react: MagicMock,
         mock_store: MagicMock,
-        mock_cp: MagicMock,
         mock_model_cls: object,
     ) -> None:
-        from agentic_ai.chat import _create_chat_agent
+        saver = InMemorySaver()
+        mock_cp = AsyncMock(return_value=saver)
+        with patch("agentic_ai.memory.get_chat_checkpointer", mock_cp):
+            from agentic_ai.chat import _create_chat_agent
 
-        _create_chat_agent()
-        call_kwargs = mock_react.call_args
-        assert call_kwargs is not None
-        all_kwargs = call_kwargs.kwargs if call_kwargs.kwargs else {}
-        assert isinstance(all_kwargs.get("checkpointer"), InMemorySaver)
+            await _create_chat_agent()
+            call_kwargs = mock_react.call_args
+            assert call_kwargs is not None
+            all_kwargs = call_kwargs.kwargs or {}
+            assert isinstance(all_kwargs.get("checkpointer"), InMemorySaver)
 
     @patch("agentic_ai.agents.langgraph_agent.ChatBedrockConverse")
-    def test_creates_planning_agent_when_requested(self, mock_model_cls: object) -> None:
+    async def test_creates_planning_agent_when_requested(self, mock_model_cls: object) -> None:
+        mock_cp = AsyncMock(return_value=InMemorySaver())
         with (
-            patch("agentic_ai.memory.get_chat_checkpointer", return_value=InMemorySaver()),
+            patch("agentic_ai.memory.get_chat_checkpointer", mock_cp),
             patch("agentic_ai.memory.get_memory_store", return_value=None),
             patch("agentic_ai.agents.deep_agent.create_planning_agent") as mock_plan,
         ):
             mock_plan.return_value = MagicMock()
             from agentic_ai.chat import _create_chat_agent
 
-            _create_chat_agent(agent_type="planning")
+            await _create_chat_agent(agent_type="planning")
             mock_plan.assert_called_once()
 
 

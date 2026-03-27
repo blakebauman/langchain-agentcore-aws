@@ -72,7 +72,7 @@ def _extract_text(content: object) -> str:
     return ""
 
 
-def _create_chat_agent(agent_type: str = "react"):
+async def _create_chat_agent(agent_type: str = "react"):
     """Create an agent configured for the chat UI.
 
     Uses get_chat_checkpointer() which returns the appropriate checkpointer
@@ -85,7 +85,7 @@ def _create_chat_agent(agent_type: str = "react"):
     """
     from agentic_ai.memory import get_chat_checkpointer, get_memory_store
 
-    checkpointer = get_chat_checkpointer()
+    checkpointer = await get_chat_checkpointer()
     store = get_memory_store()
 
     if agent_type == "planning":
@@ -172,7 +172,7 @@ async def on_chat_start() -> None:
     """Initialize a new chat session with a fresh agent and thread ID."""
     profile = cl.user_session.get("chat_profile")
     agent_type = _profile_to_agent_type(profile)
-    agent = _create_chat_agent(agent_type)
+    agent = await _create_chat_agent(agent_type)
     thread_id = str(uuid.uuid4())
 
     cl.user_session.set("agent", agent)
@@ -318,7 +318,7 @@ async def on_chat_resume(thread: dict) -> None:
     """Resume a previous chat session by restoring the thread ID."""
     profile = cl.user_session.get("chat_profile")
     agent_type = _profile_to_agent_type(profile)
-    agent = _create_chat_agent(agent_type)
+    agent = await _create_chat_agent(agent_type)
     thread_id = thread.get("id", str(uuid.uuid4()))
 
     cl.user_session.set("agent", agent)
