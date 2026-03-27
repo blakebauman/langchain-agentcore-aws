@@ -23,7 +23,7 @@ variable "foundation_model" {
 variable "instruction" {
   description = "Instructions for the Bedrock agent"
   type        = string
-  default     = "You are a helpful AI assistant. Use your tools to answer questions accurately and thoroughly."
+  default     = "You are a helpful AI assistant that helps users with software engineering tasks. Use the tools and knowledge bases available to you to assist the user accurately."
 }
 
 variable "role_arn" {
