@@ -22,3 +22,13 @@ output "log_group_name" {
   description = "CloudWatch log group name"
   value       = aws_cloudwatch_log_group.chat.name
 }
+
+output "alb_dns_name" {
+  description = "DNS name of the ALB (empty when ALB is disabled)"
+  value       = var.enable_alb ? aws_lb.chat[0].dns_name : ""
+}
+
+output "alb_arn" {
+  description = "ARN of the ALB (empty when ALB is disabled)"
+  value       = var.enable_alb ? aws_lb.chat[0].arn : ""
+}

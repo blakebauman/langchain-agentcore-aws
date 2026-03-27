@@ -43,8 +43,14 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Subnet IDs for the chat service"
+  description = "Subnet IDs for the chat service (private subnets recommended)"
   type        = list(string)
+}
+
+variable "public_subnet_ids" {
+  description = "Public subnet IDs for the ALB"
+  type        = list(string)
+  default     = []
 }
 
 variable "bedrock_model_id" {
@@ -64,4 +70,35 @@ variable "chat_persistence" {
   description = "Chat persistence mode (memory, sqlite)"
   type        = string
   default     = "sqlite"
+}
+
+# --- ALB / TLS ---
+
+variable "enable_alb" {
+  description = "Enable Application Load Balancer with HTTPS"
+  type        = bool
+  default     = false
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS (required when enable_alb=true)"
+  type        = string
+  default     = ""
+}
+
+# --- Secrets Manager ---
+
+variable "secrets_arn" {
+  description = "AWS Secrets Manager ARN containing chat secrets as JSON"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# --- Observability ---
+
+variable "enable_observability" {
+  description = "Enable AgentCore OpenTelemetry tracing"
+  type        = bool
+  default     = false
 }

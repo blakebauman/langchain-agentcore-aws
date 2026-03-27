@@ -1,6 +1,46 @@
-"""Application configuration loaded from environment variables."""
+"""Application configuration loaded from environment variables.
+
+Supports optional AWS Secrets Manager integration: set SECRETS_ARN to load
+secrets (e.g., CHAT_AUTH_SECRET, CHAT_AUTH_PASSWORD) from a Secrets Manager
+JSON secret instead of environment variables or .env files.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+
+def _load_secrets_from_arn(secret_arn: str) -> None:
+    """Load secrets from AWS Secrets Manager into environment variables.
+
+    The secret value must be a JSON object with key-value pairs that map
+    to setting names (e.g., {"CHAT_AUTH_SECRET": "...", "CHAT_AUTH_PASSWORD": "..."}).
+    Values are set as environment variables so Pydantic picks them up.
+    """
+    try:
+        import boto3
+
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        client = boto3.client("secretsmanager", region_name=region)
+        response = client.get_secret_value(SecretId=secret_arn)
+        secrets = json.loads(response["SecretString"])
+        for key, value in secrets.items():
+            os.environ.setdefault(key.upper(), str(value))
+        logger.info("Loaded secrets from %s", secret_arn)
+    except Exception:
+        logger.warning("Failed to load secrets from %s", secret_arn, exc_info=True)
+
+
+# Load secrets before Settings initialization if SECRETS_ARN is set
+_secrets_arn = os.environ.get("SECRETS_ARN", "")
+if _secrets_arn:
+    _load_secrets_from_arn(_secrets_arn)
 
 
 class Settings(BaseSettings):
@@ -13,6 +53,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     knowledge_base_id: str = ""
     s3_kb_bucket: str = ""
+    secrets_arn: str = ""  # AWS Secrets Manager ARN for loading secrets
 
     # Chat UI settings
     chat_agent_type: str = "react"  # "react" or "planning"

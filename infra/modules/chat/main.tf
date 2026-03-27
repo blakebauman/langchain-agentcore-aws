@@ -38,6 +38,19 @@ data "aws_iam_policy_document" "chat_permissions" {
     ]
     resources = ["*"]
   }
+
+  # Secrets Manager read access (when secrets_arn is provided)
+  dynamic "statement" {
+    for_each = var.secrets_arn != "" ? [1] : []
+    content {
+      sid    = "SecretsManagerRead"
+      effect = "Allow"
+      actions = [
+        "secretsmanager:GetSecretValue",
+      ]
+      resources = [var.secrets_arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "chat_bedrock" {
@@ -85,15 +98,48 @@ resource "aws_ecs_cluster" "chat" {
   }
 }
 
-# --- Security Group ---
+# --- Security Groups ---
 
 resource "aws_security_group" "chat" {
   name_prefix = "${local.prefix}-chat-"
   vpc_id      = var.vpc_id
 
   ingress {
-    from_port   = var.chat_port
-    to_port     = var.chat_port
+    from_port       = var.chat_port
+    to_port         = var.chat_port
+    protocol        = "tcp"
+    cidr_blocks     = var.enable_alb ? [] : ["0.0.0.0/0"]
+    security_groups = var.enable_alb ? [aws_security_group.alb[0].id] : []
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_security_group" "alb" {
+  count       = var.enable_alb ? 1 : 0
+  name_prefix = "${local.prefix}-chat-alb-"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -108,6 +154,78 @@ resource "aws_security_group" "chat" {
   tags = {
     Project     = var.project_name
     Environment = var.environment
+  }
+}
+
+# --- Application Load Balancer (optional) ---
+
+resource "aws_lb" "chat" {
+  count              = var.enable_alb ? 1 : 0
+  name               = "${local.prefix}-chat"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb[0].id]
+  subnets            = var.public_subnet_ids
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_lb_target_group" "chat" {
+  count       = var.enable_alb ? 1 : 0
+  name        = "${local.prefix}-chat"
+  port        = var.chat_port
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    port                = "traffic-port"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    matcher             = "200"
+  }
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+# HTTPS listener (port 443)
+resource "aws_lb_listener" "https" {
+  count             = var.enable_alb ? 1 : 0
+  load_balancer_arn = aws_lb.chat[0].arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.certificate_arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.chat[0].arn
+  }
+}
+
+# HTTP → HTTPS redirect
+resource "aws_lb_listener" "http_redirect" {
+  count             = var.enable_alb ? 1 : 0
+  load_balancer_arn = aws_lb.chat[0].arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
   }
 }
 
@@ -133,14 +251,26 @@ resource "aws_ecs_task_definition" "chat" {
           protocol      = "tcp"
         }
       ]
-      environment = [
-        { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
-        { name = "AWS_REGION", value = data.aws_region.current.name },
-        { name = "ENVIRONMENT", value = var.environment },
-        { name = "CHAT_PORT", value = tostring(var.chat_port) },
-        { name = "CHAT_PERSISTENCE", value = var.chat_persistence },
-        { name = "CHAT_AUTH_SECRET", value = var.chat_auth_secret },
-      ]
+      environment = concat(
+        [
+          { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
+          { name = "AWS_REGION", value = data.aws_region.current.name },
+          { name = "ENVIRONMENT", value = var.environment },
+          { name = "CHAT_PORT", value = tostring(var.chat_port) },
+          { name = "CHAT_PERSISTENCE", value = var.chat_persistence },
+          { name = "CHAT_AUTH_SECRET", value = var.chat_auth_secret },
+          { name = "AGENTCORE_OBSERVABILITY_ENABLED", value = tostring(var.enable_observability) },
+          { name = "AGENTCORE_AGENT_NAME", value = var.project_name },
+        ],
+        var.secrets_arn != "" ? [{ name = "SECRETS_ARN", value = var.secrets_arn }] : [],
+      )
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:${var.chat_port}/health || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -170,7 +300,16 @@ resource "aws_ecs_service" "chat" {
   network_configuration {
     subnets          = var.subnet_ids
     security_groups  = [aws_security_group.chat.id]
-    assign_public_ip = true
+    assign_public_ip = var.enable_alb ? false : true
+  }
+
+  dynamic "load_balancer" {
+    for_each = var.enable_alb ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.chat[0].arn
+      container_name   = "chat"
+      container_port   = var.chat_port
+    }
   }
 
   tags = {

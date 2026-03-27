@@ -28,8 +28,12 @@ import uuid
 import chainlit as cl
 
 from agentic_ai.config import settings
+from agentic_ai.observability import configure_tracing, get_tracer
 
 logger = logging.getLogger(__name__)
+
+# Configure OpenTelemetry tracing (opt-in via AGENTCORE_OBSERVABILITY_ENABLED)
+configure_tracing()
 
 # Bridge CHAT_AUTH_SECRET to Chainlit's expected env var
 if settings.chat_auth_secret:
@@ -42,6 +46,21 @@ if settings.chat_persistence == "sqlite":
     @cl.data_layer
     def get_data_layer() -> SQLiteDataLayer:
         return SQLiteDataLayer(db_path=settings.chat_sqlite_path)
+
+
+# --- Health check endpoint ---
+
+
+@cl.on_app_startup
+async def on_startup() -> None:
+    """Register health check route on the underlying FastAPI app."""
+    from starlette.responses import JSONResponse
+
+    app = cl.get_app()
+
+    @app.get("/health")
+    async def health_check() -> JSONResponse:
+        return JSONResponse({"status": "healthy", "version": "0.2.0"})
 
 
 def _extract_text(content: object) -> str:
@@ -180,6 +199,19 @@ async def on_message(msg: cl.Message) -> None:
         ).send()
         return
 
+    # Start OTel span for this conversation turn
+    tracer = get_tracer()
+    span = None
+    if tracer:
+        span = tracer.start_span(
+            "chat.message",
+            attributes={
+                "chat.thread_id": thread_id,
+                "chat.agent_type": cl.user_session.get("agent_type", "react"),
+                "chat.message_length": len(msg.content),
+            },
+        )
+
     config = {"configurable": {"thread_id": thread_id}}
 
     # Build message content, including uploaded file text if present
@@ -268,10 +300,15 @@ async def on_message(msg: cl.Message) -> None:
             response.content = (
                 "Sorry, an error occurred while processing your request. Please try again."
             )
+        if span:
+            span.set_attribute("chat.error", True)
     finally:
         # Close any steps that didn't get an end event
         for step in active_steps.values():
             await step.__aexit__(None, None, None)
+        if span:
+            span.set_attribute("chat.response_length", len(response.content))
+            span.end()
 
     await response.send()
 
