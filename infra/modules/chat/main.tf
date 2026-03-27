@@ -300,7 +300,7 @@ resource "aws_ecs_service" "chat" {
   network_configuration {
     subnets          = var.subnet_ids
     security_groups  = [aws_security_group.chat.id]
-    assign_public_ip = var.enable_alb ? false : true
+    assign_public_ip = true
   }
 
   dynamic "load_balancer" {

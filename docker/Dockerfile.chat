@@ -20,7 +20,6 @@ COPY src/ src/
 COPY .chainlit/ .chainlit/
 COPY chainlit.md .
 COPY public/ public/
-COPY .env.example .env
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s \

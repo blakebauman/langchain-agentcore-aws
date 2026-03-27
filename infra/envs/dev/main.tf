@@ -134,6 +134,7 @@ module "chat" {
   bedrock_model_id = "us.${var.foundation_model}"
   chat_persistence = "sqlite"
 
-  # No ALB for dev — access via ECS task public IP
-  enable_alb = false
+  enable_alb        = true
+  certificate_arn   = "arn:aws:acm:us-east-1:296045837313:certificate/fbe2db0f-4534-4dba-8fa8-91ae952a25ed"
+  public_subnet_ids = module.vpc.public_subnet_ids
 }

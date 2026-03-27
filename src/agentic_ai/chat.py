@@ -49,18 +49,18 @@ if settings.chat_persistence == "sqlite":
 
 
 # --- Health check endpoint ---
+# Chainlit exposes its FastAPI app via cl.server.app after initialization.
+# We register the route at module scope since chat.py is loaded by Chainlit.
 
-
-@cl.on_app_startup
-async def on_startup() -> None:
-    """Register health check route on the underlying FastAPI app."""
+try:
+    from chainlit.server import app as _chainlit_app
     from starlette.responses import JSONResponse
 
-    app = cl.get_app()
-
-    @app.get("/health")
+    @_chainlit_app.get("/health")
     async def health_check() -> JSONResponse:
         return JSONResponse({"status": "healthy", "version": "0.2.0"})
+except ImportError:
+    pass
 
 
 def _extract_text(content: object) -> str:

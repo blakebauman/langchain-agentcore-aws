@@ -33,6 +33,11 @@ output "chat_log_group" {
   value       = module.chat.log_group_name
 }
 
+output "alb_dns_name" {
+  description = "DNS name of the ALB"
+  value       = module.chat.alb_dns_name
+}
+
 # Uncomment after enabling the Knowledge Base module:
 # output "knowledge_base_id" {
 #   description = "ID of the Bedrock knowledge base"

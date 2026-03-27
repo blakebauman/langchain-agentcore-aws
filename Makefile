@@ -58,7 +58,7 @@ run-chat:
 
 deploy-chat:
 	@echo "--- Building chat image ---"
-	docker build -t agentic-ai-chat -f docker/Dockerfile.chat .
+	docker build --platform linux/amd64 -t agentic-ai-chat -f docker/Dockerfile.chat .
 	@echo "--- Logging in to ECR ---"
 	aws ecr get-login-password --region $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_ecr_repository_url | cut -d. -f4) | \
 		docker login --username AWS --password-stdin $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_ecr_repository_url | cut -d/ -f1)
