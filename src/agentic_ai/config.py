@@ -46,7 +46,7 @@ if _secrets_arn:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    aws_profile: str = ""
+    aws_profile: str | None = None
     aws_region: str = "us-east-1"
     bedrock_model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"
     environment: str = "dev"
