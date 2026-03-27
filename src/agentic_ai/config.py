@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     chat_auth_password: str = ""  # Required when chat_auth_secret is set
     chat_persistence: str = "memory"  # "memory", "sqlite", or "agentcore"
     chat_sqlite_path: str = ".chat_history.db"
+    chat_rate_limit: int = 0  # Max messages per minute per session (0 = unlimited)
+    chat_theme: str = ""  # Path to custom CSS file (relative to public/)
 
     # AgentCore settings (all opt-in)
     agentcore_memory_enabled: bool = False

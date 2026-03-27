@@ -19,8 +19,10 @@ Or:      make run-chat
 
 from __future__ import annotations
 
+import collections
 import logging
 import os
+import time
 import uuid
 
 import chainlit as cl
@@ -33,12 +35,22 @@ logger = logging.getLogger(__name__)
 if settings.chat_auth_secret:
     os.environ["CHAINLIT_AUTH_SECRET"] = settings.chat_auth_secret
 
+# Register SQLite data layer for conversation history sidebar
+if settings.chat_persistence == "sqlite":
+    from agentic_ai.chat_data import SQLiteDataLayer
+
+    @cl.data_layer
+    def get_data_layer() -> SQLiteDataLayer:
+        return SQLiteDataLayer(db_path=settings.chat_sqlite_path)
+
 
 def _create_chat_agent(agent_type: str = "react"):
     """Create an agent configured for the chat UI.
 
     Uses get_chat_checkpointer() which returns the appropriate checkpointer
     based on the chat_persistence setting (memory, sqlite, or agentcore).
+    When AgentCore memory is enabled, the MemoryStore provides per-user
+    long-term semantic search across conversations.
 
     Args:
         agent_type: Which agent factory to use ("react" or "planning").
@@ -99,6 +111,31 @@ def _profile_to_agent_type(profile_name: str | None) -> str:
     return "react"
 
 
+# --- Rate limiting ---
+
+# Per-session sliding window of message timestamps
+_rate_limit_windows: dict[str, collections.deque[float]] = {}
+
+
+def _check_rate_limit(thread_id: str) -> bool:
+    """Return True if the request is within rate limits, False if throttled."""
+    if settings.chat_rate_limit <= 0:
+        return True
+
+    now = time.monotonic()
+    window = _rate_limit_windows.setdefault(thread_id, collections.deque())
+
+    # Remove timestamps older than 60 seconds
+    while window and window[0] < now - 60:
+        window.popleft()
+
+    if len(window) >= settings.chat_rate_limit:
+        return False
+
+    window.append(now)
+    return True
+
+
 # --- Session lifecycle ---
 
 
@@ -126,6 +163,14 @@ async def on_message(msg: cl.Message) -> None:
     """Handle an incoming user message with streaming agent response."""
     agent = cl.user_session.get("agent")
     thread_id = cl.user_session.get("thread_id")
+
+    if not _check_rate_limit(thread_id):
+        await cl.Message(
+            content=f"Rate limit exceeded ({settings.chat_rate_limit} messages/minute). "
+            "Please wait before sending another message."
+        ).send()
+        return
+
     config = {"configurable": {"thread_id": thread_id}}
 
     # Build message content, including uploaded file text if present

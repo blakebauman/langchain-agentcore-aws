@@ -21,6 +21,7 @@ def _mock_chainlit():
     mock_cl.on_chat_resume = lambda f: f
     mock_cl.set_chat_profiles = lambda f: f
     mock_cl.password_auth_callback = lambda f: f
+    mock_cl.data_layer = lambda f: f
     sys.modules["chainlit"] = mock_cl
     # Clear cached import so chat.py re-imports with mock
     sys.modules.pop("agentic_ai.chat", None)
@@ -93,3 +94,30 @@ class TestChatProfiles:
 
         profiles = await chat_profiles()
         assert len(profiles) == 2
+
+
+class TestRateLimiting:
+    def test_allows_within_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("agentic_ai.config.settings.chat_rate_limit", 5)
+        from agentic_ai.chat import _check_rate_limit, _rate_limit_windows
+
+        _rate_limit_windows.clear()
+        assert _check_rate_limit("test-thread") is True
+        assert _check_rate_limit("test-thread") is True
+
+    def test_blocks_over_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("agentic_ai.config.settings.chat_rate_limit", 2)
+        from agentic_ai.chat import _check_rate_limit, _rate_limit_windows
+
+        _rate_limit_windows.clear()
+        assert _check_rate_limit("test-thread") is True
+        assert _check_rate_limit("test-thread") is True
+        assert _check_rate_limit("test-thread") is False
+
+    def test_unlimited_when_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("agentic_ai.config.settings.chat_rate_limit", 0)
+        from agentic_ai.chat import _check_rate_limit, _rate_limit_windows
+
+        _rate_limit_windows.clear()
+        for _ in range(100):
+            assert _check_rate_limit("test-thread") is True

@@ -1,0 +1,31 @@
+/* Custom theme for Agentic AI AWS chat UI.
+   Loaded when CHAT_THEME=theme.css is set.
+   Customize colors, fonts, and layout below. */
+
+:root {
+  /* Primary brand colors */
+  --primary-color: #232f3e;    /* AWS dark blue */
+  --primary-hover: #37475a;
+  --accent-color: #ff9900;     /* AWS orange */
+
+  /* Background */
+  --background-color: #f8f9fa;
+  --surface-color: #ffffff;
+
+  /* Text */
+  --text-color: #232f3e;
+  --text-secondary: #5f6b7a;
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] {
+  --primary-color: #ff9900;
+  --primary-hover: #ffb84d;
+  --accent-color: #ff9900;
+
+  --background-color: #0f1b2d;
+  --surface-color: #1a2744;
+
+  --text-color: #e8eaed;
+  --text-secondary: #9aa5b4;
+}
