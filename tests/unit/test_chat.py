@@ -96,6 +96,35 @@ class TestChatProfiles:
         assert len(profiles) == 2
 
 
+class TestExtractText:
+    def test_plain_string(self) -> None:
+        from agentic_ai.chat import _extract_text
+
+        assert _extract_text("hello") == "hello"
+
+    def test_bedrock_content_blocks(self) -> None:
+        from agentic_ai.chat import _extract_text
+
+        blocks = [{"type": "text", "text": "Hello "}, {"type": "text", "text": "world"}]
+        assert _extract_text(blocks) == "Hello world"
+
+    def test_empty_list(self) -> None:
+        from agentic_ai.chat import _extract_text
+
+        assert _extract_text([]) == ""
+
+    def test_none(self) -> None:
+        from agentic_ai.chat import _extract_text
+
+        assert _extract_text(None) == ""
+
+    def test_mixed_blocks(self) -> None:
+        from agentic_ai.chat import _extract_text
+
+        blocks = [{"type": "text", "text": "hi"}, {"type": "tool_use", "id": "123"}]
+        assert _extract_text(blocks) == "hi"
+
+
 class TestRateLimiting:
     def test_allows_within_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("agentic_ai.config.settings.chat_rate_limit", 5)

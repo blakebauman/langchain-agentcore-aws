@@ -44,6 +44,15 @@ if settings.chat_persistence == "sqlite":
         return SQLiteDataLayer(db_path=settings.chat_sqlite_path)
 
 
+def _extract_text(content: object) -> str:
+    """Extract plain text from LLM content (string or Bedrock content blocks)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(block.get("text", "") for block in content if isinstance(block, dict))
+    return ""
+
+
 def _create_chat_agent(agent_type: str = "react"):
     """Create an agent configured for the chat UI.
 
@@ -238,9 +247,20 @@ async def on_message(msg: cl.Message) -> None:
             # LLM streaming tokens
             elif kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
-                token = chunk.content if isinstance(chunk.content, str) else ""
+                token = _extract_text(chunk.content)
                 if token:
                     await response.stream_token(token)
+
+            # Capture final agent response as fallback
+            elif kind == "on_chain_end" and event.get("name") == "LangGraph":
+                output = event["data"].get("output", {})
+                if isinstance(output, dict) and "messages" in output:
+                    messages = output["messages"]
+                    if messages:
+                        last = messages[-1]
+                        fallback = _extract_text(getattr(last, "content", ""))
+                        if fallback and not response.content:
+                            response.content = fallback
 
     except Exception:
         logger.exception("Error during agent invocation")
