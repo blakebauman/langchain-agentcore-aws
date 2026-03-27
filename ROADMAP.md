@@ -24,7 +24,7 @@ Product and engineering roadmap for Agentic AI AWS. Items are organized by prior
 - [x] Deploy chat service to ECS Fargate via Terraform (VPC, ECR, ECS)
 - [x] Build and push Docker image to ECR
 - [x] ALB with HTTPS/TLS and ACM certificate
-- [x] Custom domain (chat.felix.run) with DNS pointing to ALB
+- [x] Custom domain (custom domain) with DNS pointing to ALB
 - [x] Validate end-to-end: HTTPS → ALB → ECS → Bedrock
 - [ ] Set up CloudWatch alarms for error rates and latency
 
