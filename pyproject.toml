@@ -24,6 +24,7 @@ dependencies = [
 chat = [
     "chainlit>=2.0",
     "langgraph-checkpoint-sqlite>=2.0",
+    "aiosqlite>=0.20",
 ]
 dev = [
     "pytest>=8.0",
