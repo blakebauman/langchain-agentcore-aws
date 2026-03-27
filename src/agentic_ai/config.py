@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     chat_auth_secret: str = ""  # Set to enable password authentication
     chat_auth_username: str = "admin"
     chat_auth_password: str = ""  # Required when chat_auth_secret is set
+    chat_persistence: str = "memory"  # "memory", "sqlite", or "agentcore"
+    chat_sqlite_path: str = ".chat_history.db"
 
     # AgentCore settings (all opt-in)
     agentcore_memory_enabled: bool = False

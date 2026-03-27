@@ -40,6 +40,39 @@ class TestGetCheckpointer:
             assert result is not None
 
 
+class TestGetChatCheckpointer:
+    def test_returns_in_memory_saver_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        monkeypatch.setattr("agentic_ai.memory.settings.chat_persistence", "memory")
+        from agentic_ai.memory import get_chat_checkpointer
+
+        result = get_chat_checkpointer()
+        assert isinstance(result, InMemorySaver)
+
+    def test_returns_sqlite_saver_when_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        monkeypatch.setattr("agentic_ai.memory.settings.chat_persistence", "sqlite")
+        monkeypatch.setattr("agentic_ai.memory.settings.chat_sqlite_path", ":memory:")
+        from agentic_ai.memory import get_chat_checkpointer
+
+        result = get_chat_checkpointer()
+        assert isinstance(result, SqliteSaver)
+
+    def test_falls_back_to_memory_when_agentcore_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        monkeypatch.setattr("agentic_ai.memory.settings.chat_persistence", "agentcore")
+        monkeypatch.setattr("agentic_ai.memory.settings.agentcore_memory_enabled", False)
+        from agentic_ai.memory import get_chat_checkpointer
+
+        result = get_chat_checkpointer()
+        assert isinstance(result, InMemorySaver)
+
+
 class TestGetMemoryStore:
     def test_returns_none_when_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENTCORE_MEMORY_ENABLED", "false")

@@ -8,8 +8,10 @@ Features:
 - Streaming token-by-token responses
 - Chat profiles for switching between ReAct and Planning agents
 - Tool call visualization via expandable steps
+- Planning/reasoning step display for DeepAgent
 - Optional password authentication
 - File upload support for knowledge base queries
+- Configurable persistence (memory, SQLite, or AgentCore)
 
 Run via: chainlit run src/agentic_ai/chat.py --port 8000
 Or:      make run-chat
@@ -18,6 +20,7 @@ Or:      make run-chat
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 
 import chainlit as cl
@@ -26,26 +29,24 @@ from agentic_ai.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Bridge CHAT_AUTH_SECRET to Chainlit's expected env var
+if settings.chat_auth_secret:
+    os.environ["CHAINLIT_AUTH_SECRET"] = settings.chat_auth_secret
+
 
 def _create_chat_agent(agent_type: str = "react"):
     """Create an agent configured for the chat UI.
 
-    Uses InMemorySaver as a fallback checkpointer when AgentCore memory is
-    disabled, so conversation history is preserved within a running session.
+    Uses get_chat_checkpointer() which returns the appropriate checkpointer
+    based on the chat_persistence setting (memory, sqlite, or agentcore).
 
     Args:
         agent_type: Which agent factory to use ("react" or "planning").
     """
-    from langgraph.checkpoint.memory import InMemorySaver
+    from agentic_ai.memory import get_chat_checkpointer, get_memory_store
 
-    from agentic_ai.memory import get_checkpointer, get_memory_store
-
-    checkpointer = get_checkpointer()
+    checkpointer = get_chat_checkpointer()
     store = get_memory_store()
-
-    # Fall back to in-memory checkpointer so chat history works locally
-    if checkpointer is None:
-        checkpointer = InMemorySaver()
 
     if agent_type == "planning":
         from agentic_ai.agents.deep_agent import create_planning_agent
@@ -85,7 +86,7 @@ async def chat_profiles() -> list[cl.ChatProfile]:
         ),
         cl.ChatProfile(
             name="Planning Agent",
-            markdown_description=("Multi-step planning agent for complex research tasks."),
+            markdown_description="Multi-step planning agent for complex research tasks.",
             icon="https://cdn-icons-png.flaticon.com/512/2620/2620389.png",
         ),
     ]
@@ -146,40 +147,66 @@ async def on_message(msg: cl.Message) -> None:
     response = cl.Message(content="")
     active_steps: dict[str, cl.Step] = {}
 
-    async for event in agent.astream_events(
-        {"messages": [("user", content)]},
-        config=config,
-        version="v2",
-    ):
-        kind = event["event"]
+    try:
+        async for event in agent.astream_events(
+            {"messages": [("user", content)]},
+            config=config,
+            version="v2",
+        ):
+            kind = event["event"]
 
-        # Tool call started — open a step
-        if kind == "on_tool_start":
-            tool_name = event.get("name", "tool")
-            run_id = event.get("run_id", "")
-            step = cl.Step(name=tool_name, type="tool")
-            step.input = str(event["data"].get("input", ""))
-            await step.__aenter__()
-            active_steps[run_id] = step
+            # Tool call started — open a step
+            if kind == "on_tool_start":
+                tool_name = event.get("name", "tool")
+                run_id = event.get("run_id", "")
+                step = cl.Step(name=tool_name, type="tool")
+                step.input = str(event["data"].get("input", ""))
+                await step.__aenter__()
+                active_steps[run_id] = step
 
-        # Tool call finished — close the step with output
-        elif kind == "on_tool_end":
-            run_id = event.get("run_id", "")
-            step = active_steps.pop(run_id, None)
-            if step:
-                step.output = str(event["data"].get("output", ""))
-                await step.__aexit__(None, None, None)
+            # Tool call finished — close the step with output
+            elif kind == "on_tool_end":
+                run_id = event.get("run_id", "")
+                step = active_steps.pop(run_id, None)
+                if step:
+                    step.output = str(event["data"].get("output", ""))
+                    await step.__aexit__(None, None, None)
 
-        # LLM streaming tokens
-        elif kind == "on_chat_model_stream":
-            chunk = event["data"]["chunk"]
-            token = chunk.content if isinstance(chunk.content, str) else ""
-            if token:
-                await response.stream_token(token)
+            # Planning/reasoning steps (DeepAgent sub-graphs)
+            elif kind == "on_chain_start":
+                chain_name = event.get("name", "")
+                if chain_name and chain_name not in ("RunnableSequence", "LangGraph"):
+                    run_id = event.get("run_id", "")
+                    step = cl.Step(name=chain_name, type="run")
+                    step.input = str(event["data"].get("input", ""))[:500]
+                    await step.__aenter__()
+                    active_steps[run_id] = step
 
-    # Close any steps that didn't get an end event
-    for step in active_steps.values():
-        await step.__aexit__(None, None, None)
+            elif kind == "on_chain_end":
+                run_id = event.get("run_id", "")
+                step = active_steps.pop(run_id, None)
+                if step:
+                    output = event["data"].get("output", "")
+                    step.output = str(output)[:500] if output else ""
+                    await step.__aexit__(None, None, None)
+
+            # LLM streaming tokens
+            elif kind == "on_chat_model_stream":
+                chunk = event["data"]["chunk"]
+                token = chunk.content if isinstance(chunk.content, str) else ""
+                if token:
+                    await response.stream_token(token)
+
+    except Exception:
+        logger.exception("Error during agent invocation")
+        if not response.content:
+            response.content = (
+                "Sorry, an error occurred while processing your request. Please try again."
+            )
+    finally:
+        # Close any steps that didn't get an end event
+        for step in active_steps.values():
+            await step.__aexit__(None, None, None)
 
     await response.send()
 

@@ -19,6 +19,7 @@ make infra-plan       # Terraform plan
 make infra-apply      # Terraform apply
 make run-agent QUERY="your question"  # Run LangGraph agent locally
 make run-runtime      # Start AgentCore Runtime server (AG-UI protocol)
+make run-chat         # Start Chainlit chat UI (http://localhost:8000)
 ```
 
 Run a single test: `python -m pytest tests/unit/test_tools.py::TestCalculator::test_addition -v`
@@ -38,13 +39,15 @@ Both agents share the same tool registry, accept optional `checkpointer`/`store`
 - `tools/gateway.py` — Discovers MCP-compatible tools from AgentCore Gateway.
 - `tools/agentcore_builtins.py` — Code Interpreter and Browser tools (not in default tools, import explicitly).
 
-**Tools** (`src/agentic_ai/tools/`): Registry in `__init__.py` exposes `get_default_tools()` → `[calculator, web_search]` + gateway tools when enabled. Knowledge base tool excluded by default (requires deployed infra with `KNOWLEDGE_BASE_ID` set).
+**Chat UI** (`src/agentic_ai/chat.py`): Chainlit-based web chat interface. Supports streaming responses, chat profiles (ReAct/Planning agent switching), tool call visualization as expandable steps, optional password auth (`CHAT_AUTH_SECRET` + `CHAT_AUTH_PASSWORD`), and file uploads. Persistence configurable via `CHAT_PERSISTENCE` (memory/sqlite/agentcore). Optional dependency: `pip install -e ".[chat]"`.
+
+**Tools** (`src/agentic_ai/tools/`): Registry in `__init__.py` exposes `get_default_tools()` → `[calculator, web_search]` + knowledge base tool when `KNOWLEDGE_BASE_ID` is set + gateway tools when enabled.
 
 **Chains** (`src/agentic_ai/chains/rag_chain.py`): Non-agent RAG pattern (retrieve from KB → prompt → LLM).
 
 **Lambda handler** (`src/agentic_ai/lambda_handlers/action_group_handler.py`): Routes Bedrock Agent action group invocations by `apiPath` (`/calculate`, `/health`). Returns Bedrock-formatted responses.
 
-**Config** (`src/agentic_ai/config.py`): Pydantic `BaseSettings` loading from `.env`. Singleton `settings` instance used throughout. AgentCore settings default to disabled.
+**Config** (`src/agentic_ai/config.py`): Pydantic `BaseSettings` loading from `.env`. Singleton `settings` instance used throughout. AgentCore settings default to disabled. Chat UI settings: `CHAT_AGENT_TYPE`, `CHAT_PORT`, `CHAT_AUTH_SECRET`, `CHAT_AUTH_USERNAME`, `CHAT_AUTH_PASSWORD`, `CHAT_PERSISTENCE`, `CHAT_SQLITE_PATH`.
 
 ## Infrastructure
 
@@ -66,4 +69,6 @@ GitHub Actions (`.github/workflows/ci.yml`): ruff lint + format check, unit test
 - `langgraph-checkpoint-aws` — AgentCore Memory integration (checkpointer + store)
 - `boto3`/`botocore[crt]` — AWS SDK
 - `pydantic-settings` — env-based configuration
+- `chainlit` — chat UI (optional, `pip install -e ".[chat]"`)
+- `langgraph-checkpoint-sqlite` — SQLite persistence for chat (optional, included in chat extras)
 - Default model: Claude Sonnet 4 (`us.anthropic.claude-sonnet-4-20250514-v1:0`)

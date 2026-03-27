@@ -38,10 +38,10 @@ class TestCreateChatAgent:
         assert agent is not None
 
     @patch("agentic_ai.agents.langgraph_agent.ChatBedrockConverse")
-    @patch("agentic_ai.memory.get_checkpointer", return_value=None)
+    @patch("agentic_ai.memory.get_chat_checkpointer", return_value=InMemorySaver())
     @patch("agentic_ai.memory.get_memory_store", return_value=None)
     @patch("agentic_ai.agents.langgraph_agent.create_react_agent")
-    def test_injects_in_memory_saver_when_agentcore_disabled(
+    def test_passes_checkpointer_from_factory(
         self,
         mock_react: MagicMock,
         mock_store: MagicMock,
@@ -57,26 +57,9 @@ class TestCreateChatAgent:
         assert isinstance(all_kwargs.get("checkpointer"), InMemorySaver)
 
     @patch("agentic_ai.agents.langgraph_agent.ChatBedrockConverse")
-    def test_uses_agentcore_checkpointer_when_provided(self, mock_model_cls: object) -> None:
-        mock_checkpointer = MagicMock()
-
-        with (
-            patch("agentic_ai.memory.get_checkpointer", return_value=mock_checkpointer),
-            patch("agentic_ai.memory.get_memory_store", return_value=None),
-            patch("agentic_ai.agents.langgraph_agent.create_react_agent") as mock_react,
-        ):
-            from agentic_ai.chat import _create_chat_agent
-
-            _create_chat_agent()
-            call_kwargs = mock_react.call_args
-            assert call_kwargs is not None
-            all_kwargs = call_kwargs.kwargs if call_kwargs.kwargs else {}
-            assert all_kwargs.get("checkpointer") is mock_checkpointer
-
-    @patch("agentic_ai.agents.langgraph_agent.ChatBedrockConverse")
     def test_creates_planning_agent_when_requested(self, mock_model_cls: object) -> None:
         with (
-            patch("agentic_ai.memory.get_checkpointer", return_value=None),
+            patch("agentic_ai.memory.get_chat_checkpointer", return_value=InMemorySaver()),
             patch("agentic_ai.memory.get_memory_store", return_value=None),
             patch("agentic_ai.agents.deep_agent.create_planning_agent") as mock_plan,
         ):

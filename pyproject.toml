@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 chat = [
     "chainlit>=2.0",
+    "langgraph-checkpoint-sqlite>=2.0",
 ]
 dev = [
     "pytest>=8.0",

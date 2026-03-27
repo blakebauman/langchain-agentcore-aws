@@ -34,6 +34,9 @@ venv/
 .DS_Store
 Thumbs.db
 
+# Chat UI
+.chat_history.db
+
 # Testing
 .coverage
 htmlcov/

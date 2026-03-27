@@ -5,6 +5,9 @@ When AgentCore memory is enabled, agents get:
 - Long-term memory (store): semantic search across conversation history
 
 When disabled, agents use LangGraph's in-memory defaults.
+
+For the chat UI, a SQLite checkpointer is available as a middle ground
+between ephemeral in-memory and full AgentCore persistence.
 """
 
 from __future__ import annotations
@@ -33,6 +36,34 @@ def get_checkpointer() -> BaseCheckpointSaver | None:
         memory_id=f"{settings.agentcore_agent_name}-{settings.environment}",
         region_name=settings.aws_region,
     )
+
+
+def get_chat_checkpointer() -> BaseCheckpointSaver:
+    """Return a checkpointer for chat UI persistence.
+
+    Follows the chat_persistence setting:
+    - "agentcore": uses AgentCore (delegates to get_checkpointer, falls back to memory)
+    - "sqlite": persists to a local SQLite database
+    - "memory": in-memory only (default, lost on restart)
+    """
+    if settings.chat_persistence == "agentcore":
+        cp = get_checkpointer()
+        if cp is not None:
+            return cp
+
+    if settings.chat_persistence == "sqlite":
+        import sqlite3
+
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        conn = sqlite3.connect(settings.chat_sqlite_path, check_same_thread=False)
+        saver = SqliteSaver(conn)
+        saver.setup()
+        return saver
+
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    return InMemorySaver()
 
 
 def get_memory_store() -> BaseStore | None:
