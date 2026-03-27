@@ -7,3 +7,15 @@ services:
       - .env
     volumes:
       - ./src:/app/src
+
+  chat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.chat
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./.chainlit:/app/.chainlit

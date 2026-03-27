@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     knowledge_base_id: str = ""
     s3_kb_bucket: str = ""
 
+    # Chat UI settings
+    chat_agent_type: str = "react"  # "react" or "planning"
+    chat_port: int = 8000
+
     # AgentCore settings (all opt-in)
     agentcore_memory_enabled: bool = False
     agentcore_gateway_enabled: bool = False

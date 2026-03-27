@@ -1,4 +1,4 @@
-.PHONY: install lint fmt test test-integration infra-init infra-plan infra-apply run-agent run-runtime clean
+.PHONY: install lint fmt test test-integration infra-init infra-plan infra-apply run-agent run-runtime run-chat clean
 
 PYTHON := python3
 VENV := .venv
@@ -44,6 +44,9 @@ run-agent:
 
 run-runtime:
 	$(VENV)/bin/python -m agentic_ai.runtime
+
+run-chat:
+	$(VENV)/bin/chainlit run src/agentic_ai/chat.py --port 8000 --watch
 
 clean:
 	rm -rf $(VENV) dist/ build/ *.egg-info .pytest_cache .mypy_cache htmlcov .coverage
