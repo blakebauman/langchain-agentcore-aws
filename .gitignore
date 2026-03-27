@@ -37,6 +37,7 @@ Thumbs.db
 
 # Chat UI
 .chat_history.db
+.chainlit/translations/
 
 # Testing
 .coverage
