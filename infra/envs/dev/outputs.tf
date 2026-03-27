@@ -8,6 +8,31 @@ output "bedrock_agent_alias_id" {
   value       = module.bedrock_agent.agent_alias_id
 }
 
+output "vpc_id" {
+  description = "VPC ID"
+  value       = module.vpc.vpc_id
+}
+
+output "chat_ecr_repository_url" {
+  description = "ECR repository URL for the chat image"
+  value       = aws_ecr_repository.chat.repository_url
+}
+
+output "chat_cluster_arn" {
+  description = "ECS cluster ARN for the chat service"
+  value       = module.chat.cluster_arn
+}
+
+output "chat_service_name" {
+  description = "ECS service name for the chat service"
+  value       = module.chat.service_name
+}
+
+output "chat_log_group" {
+  description = "CloudWatch log group for the chat service"
+  value       = module.chat.log_group_name
+}
+
 # Uncomment after enabling the Knowledge Base module:
 # output "knowledge_base_id" {
 #   description = "ID of the Bedrock knowledge base"

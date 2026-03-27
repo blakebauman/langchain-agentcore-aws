@@ -94,3 +94,46 @@ module "bedrock_agent" {
 #   enable_memory    = true
 #   enable_gateway   = false
 # }
+
+# --- VPC (free) ---
+
+module "vpc" {
+  source = "../../modules/vpc"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  availability_zones = ["${var.aws_region}a", "${var.aws_region}b"]
+}
+
+# --- ECR Repository for Chat Image ---
+
+resource "aws_ecr_repository" "chat" {
+  name                 = "${var.project_name}-${var.environment}-chat"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+# --- Chat Service (ECS Fargate) ---
+
+module "chat" {
+  source = "../../modules/chat"
+
+  project_name     = var.project_name
+  environment      = var.environment
+  chat_image_uri   = "${aws_ecr_repository.chat.repository_url}:latest"
+  vpc_id           = module.vpc.vpc_id
+  subnet_ids       = module.vpc.public_subnet_ids
+  bedrock_model_id = "us.${var.foundation_model}"
+  chat_persistence = "sqlite"
+
+  # No ALB for dev — access via ECS task public IP
+  enable_alb = false
+}

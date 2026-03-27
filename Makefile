@@ -1,4 +1,4 @@
-.PHONY: install install-chat lint fmt test test-integration infra-init infra-plan infra-apply run-agent run-runtime run-chat clean
+.PHONY: install install-chat lint fmt test test-integration infra-init infra-plan infra-apply run-agent run-runtime run-chat deploy-chat clean
 
 PYTHON := python3
 VENV := .venv
@@ -55,6 +55,24 @@ run-runtime:
 
 run-chat:
 	$(CHAT_VENV)/bin/chainlit run src/agentic_ai/chat.py --port 8000 --watch
+
+deploy-chat:
+	@echo "--- Building chat image ---"
+	docker build -t agentic-ai-chat -f docker/Dockerfile.chat .
+	@echo "--- Logging in to ECR ---"
+	aws ecr get-login-password --region $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_ecr_repository_url | cut -d. -f4) | \
+		docker login --username AWS --password-stdin $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_ecr_repository_url | cut -d/ -f1)
+	@echo "--- Tagging and pushing ---"
+	docker tag agentic-ai-chat:latest $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_ecr_repository_url):latest
+	docker push $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_ecr_repository_url):latest
+	@echo "--- Restarting ECS service ---"
+	aws ecs update-service \
+		--cluster $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_cluster_arn) \
+		--service $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_service_name) \
+		--force-new-deployment \
+		--region $(shell terraform -chdir=infra/envs/$(ENV) output -raw chat_ecr_repository_url | cut -d. -f4) \
+		--no-cli-pager
+	@echo "--- Deploy complete ---"
 
 clean:
 	rm -rf $(VENV) $(CHAT_VENV) dist/ build/ *.egg-info .pytest_cache .mypy_cache htmlcov .coverage
