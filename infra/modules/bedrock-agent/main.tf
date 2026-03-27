@@ -3,10 +3,10 @@ locals {
 }
 
 resource "aws_bedrockagent_agent" "main" {
-  agent_name              = "${local.prefix}-${var.agent_name}"
-  agent_resource_role_arn = var.role_arn
-  foundation_model        = var.foundation_model
-  instruction             = var.instruction
+  agent_name                  = "${local.prefix}-${var.agent_name}"
+  agent_resource_role_arn     = var.role_arn
+  foundation_model            = var.foundation_model
+  instruction                 = var.instruction
   idle_session_ttl_in_seconds = var.idle_session_ttl
 }
 
